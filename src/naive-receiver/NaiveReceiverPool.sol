@@ -23,6 +23,7 @@ contract NaiveReceiverPool is Multicall, IERC3156FlashLender {
     error UnsupportedCurrency();
     error CallbackFailed();
 
+    //setup
     constructor(address _trustedForwarder, address payable _weth, address _feeReceiver) payable {
         weth = WETH(_weth);
         trustedForwarder = _trustedForwarder;
@@ -40,6 +41,7 @@ contract NaiveReceiverPool is Multicall, IERC3156FlashLender {
         return FIXED_FEE;
     }
 
+    // main flash loan function
     function flashLoan(IERC3156FlashBorrower receiver, address token, uint256 amount, bytes calldata data)
         external
         returns (bool)
@@ -53,12 +55,12 @@ contract NaiveReceiverPool is Multicall, IERC3156FlashLender {
         if (receiver.onFlashLoan(msg.sender, address(weth), amount, FIXED_FEE, data) != CALLBACK_SUCCESS) {
             revert CallbackFailed();
         }
+        
+        uint256 amountWithFee = amount + FIXED_FEE; //total needed to be paid back(borrowed amount + fee)
+        weth.transferFrom(address(receiver), address(this), amountWithFee); //get back the borrowed amount + fee
+        totalDeposits += amountWithFee; //add the borrowed amount + fee to the total deposits
 
-        uint256 amountWithFee = amount + FIXED_FEE;
-        weth.transferFrom(address(receiver), address(this), amountWithFee);
-        totalDeposits += amountWithFee;
-
-        deposits[feeReceiver] += FIXED_FEE;
+        deposits[feeReceiver] += FIXED_FEE; //add the fee to the fee receiver's deposits
 
         return true;
     }
