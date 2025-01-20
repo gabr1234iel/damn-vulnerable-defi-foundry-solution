@@ -5,6 +5,7 @@ pragma solidity =0.8.25;
 import {Test, console} from "forge-std/Test.sol";
 import {DamnValuableToken} from "../../src/DamnValuableToken.sol";
 import {TrusterLenderPool} from "../../src/truster/TrusterLenderPool.sol";
+import {PwnTruster} from "./PwnTruster.sol";
 
 contract TrusterChallenge is Test {
     address deployer = makeAddr("deployer");
@@ -51,7 +52,11 @@ contract TrusterChallenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_truster() public checkSolvedByPlayer {
-        
+        PwnTruster pwnTruster = new PwnTruster(address(token), address(pool), recovery);
+        require(
+            pwnTruster.pwn(),
+            "PwnTruster failed"
+        );
     }
 
     /**
@@ -59,7 +64,7 @@ contract TrusterChallenge is Test {
      */
     function _isSolved() private view {
         // Player must have executed a single transaction
-        assertEq(vm.getNonce(player), 1, "Player executed more than one tx");
+        assertEq(vm.getNonce(player), 1, "Player did not execute exactly one transaction");
 
         // All rescued funds sent to recovery account
         assertEq(token.balanceOf(address(pool)), 0, "Pool still has tokens");
