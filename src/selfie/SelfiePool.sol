@@ -51,7 +51,8 @@ contract SelfiePool is IERC3156FlashLender, ReentrancyGuard {
         external
         nonReentrant
         returns (bool)
-    {
+    {   
+        //can only flash loan token used in constructor
         if (_token != address(token)) {
             revert UnsupportedCurrency();
         }
@@ -68,6 +69,7 @@ contract SelfiePool is IERC3156FlashLender, ReentrancyGuard {
         return true;
     }
 
+    // withdraw tokens from the pool
     function emergencyExit(address receiver) external onlyGovernance {
         uint256 amount = token.balanceOf(address(this));
         token.transfer(receiver, amount);
