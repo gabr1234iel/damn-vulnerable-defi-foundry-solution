@@ -8,18 +8,21 @@ import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {BitMaps} from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 
+// Distribution data for each token
 struct Distribution {
-    uint256 remaining;
-    uint256 nextBatchNumber;
-    mapping(uint256 batchNumber => bytes32 root) roots;
-    mapping(address claimer => mapping(uint256 word => uint256 bits)) claims;
+    uint256 remaining;  // remaining amount to be distributed
+    uint256 nextBatchNumber;    // next batch number to be distributed
+    mapping(uint256 batchNumber => bytes32 root) roots; // merkle roots for each batch
+    mapping(address claimer => mapping(uint256 word => uint256 bits)) claims;   // claimed bits for each claimer
 }
 
+
+// Claim data for each claim
 struct Claim {
-    uint256 batchNumber;
-    uint256 amount;
-    uint256 tokenIndex;
-    bytes32[] proof;
+    uint256 batchNumber;    // batch number
+    uint256 amount;     // amount to be claimed
+    uint256 tokenIndex;     // token index
+    bytes32[] proof;        // merkle proof
 }
 
 /**
@@ -30,6 +33,7 @@ contract TheRewarderDistributor {
 
     address public immutable owner = msg.sender;
 
+    // mapping of token to distribution data
     mapping(IERC20 token => Distribution) public distributions;
 
     error StillDistributing();
@@ -40,6 +44,7 @@ contract TheRewarderDistributor {
 
     event NewDistribution(IERC20 token, uint256 batchNumber, bytes32 newMerkleRoot, uint256 totalAmount);
 
+    // Getters
     function getRemaining(address token) external view returns (uint256) {
         return distributions[IERC20(token)].remaining;
     }
@@ -52,26 +57,44 @@ contract TheRewarderDistributor {
         return distributions[IERC20(token)].roots[batchNumber];
     }
 
+    // Create a new distribution, setting the new root and the total amount to be distributed
+    //params: token - the token to be distributed
+    //params: newRoot - the new merkle root for the distribution
+    //params: amount - the total amount to be distributed
     function createDistribution(IERC20 token, bytes32 newRoot, uint256 amount) external {
+        
+        //cannot distribute 0 tokens
         if (amount == 0) revert NotEnoughTokensToDistribute();
+
+        //zero address cannot be the merkle root
         if (newRoot == bytes32(0)) revert InvalidRoot();
+
+        //cannot create new distribution if there is still a distribution ongoing/ remaining tokens
         if (distributions[token].remaining != 0) revert StillDistributing();
 
+        //initialize total amount to be distributed as remaining amount
         distributions[token].remaining = amount;
 
+        // batching the distribution
         uint256 batchNumber = distributions[token].nextBatchNumber;
+        // set the new root for the batch
         distributions[token].roots[batchNumber] = newRoot;
+        // increment the batch number
         distributions[token].nextBatchNumber++;
 
+        //transfer the tokens from the sender to the contract
         SafeTransferLib.safeTransferFrom(address(token), msg.sender, address(this), amount);
 
         emit NewDistribution(token, batchNumber, newRoot, amount);
     }
 
+    // Clean up the contract by transferring out any remaining tokens
     function clean(IERC20[] calldata tokens) external {
         for (uint256 i = 0; i < tokens.length; i++) {
             IERC20 token = tokens[i];
+            // if all tokens have been distributed, transfer the remaining tokens to the owner
             if (distributions[token].remaining == 0) {
+                // transfer the remaining tokens to the owner
                 token.transfer(owner, token.balanceOf(address(this)));
             }
         }
@@ -84,12 +107,14 @@ contract TheRewarderDistributor {
         uint256 bitsSet; // accumulator
         uint256 amount;
 
+        // for each claim
         for (uint256 i = 0; i < inputClaims.length; i++) {
-            inputClaim = inputClaims[i];
 
+            inputClaim = inputClaims[i];
+            // get the word position and bit position
             uint256 wordPosition = inputClaim.batchNumber / 256;
             uint256 bitPosition = inputClaim.batchNumber % 256;
-
+            // get the token
             if (token != inputTokens[inputClaim.tokenIndex]) {
                 if (address(token) != address(0)) {
                     if (!_setClaimed(token, amount, wordPosition, bitsSet)) revert AlreadyClaimed();
@@ -103,7 +128,7 @@ contract TheRewarderDistributor {
                 amount += inputClaim.amount;
             }
 
-            // for the last claim
+            // for the last claim , this is vulnerable because someone can repeatedly claim  their valid claims in this array
             if (i == inputClaims.length - 1) {
                 if (!_setClaimed(token, amount, wordPosition, bitsSet)) revert AlreadyClaimed();
             }

