@@ -10,6 +10,10 @@ interface IERC20 {
     function balanceOf(address account) external returns (uint256);
 }
 
+// You start with 20 ETH and 10000 DVT tokens in balance. The pool has a million DVT tokens in balance at risk!
+
+
+
 contract PuppetV2Pool {
     address private _uniswapPair;
     address private _uniswapFactory;
@@ -32,23 +36,25 @@ contract PuppetV2Pool {
      *         Sender must have approved enough WETH in advance.
      *         Calculations assume that WETH and borrowed token have same amount of decimals.
      */
+
+
     function borrow(uint256 borrowAmount) external {
         // Calculate how much WETH the user must deposit
-        uint256 amount = calculateDepositOfWETHRequired(borrowAmount);
+        uint256 amount = calculateDepositOfWETHRequired(borrowAmount);  
 
         // Take the WETH
-        _weth.transferFrom(msg.sender, address(this), amount);
+        _weth.transferFrom(msg.sender, address(this), amount);  // returns bool if transfer is successful (interact)
 
         // internal accounting
-        deposits[msg.sender] += amount;
+        deposits[msg.sender] += amount; 
 
-        require(_token.transfer(msg.sender, borrowAmount), "Transfer failed");
+        require(_token.transfer(msg.sender, borrowAmount), "Transfer failed");  // send DVTs to the borrower.
 
         emit Borrowed(msg.sender, amount, borrowAmount, block.timestamp);
     }
 
     function calculateDepositOfWETHRequired(uint256 tokenAmount) public view returns (uint256) {
-        uint256 depositFactor = 3;
+        uint256 depositFactor = 3;  // 3 times the value of the token amount
         return _getOracleQuote(tokenAmount) * depositFactor / 1 ether;
     }
 
@@ -56,7 +62,25 @@ contract PuppetV2Pool {
     function _getOracleQuote(uint256 amount) private view returns (uint256) {
         (uint256 reservesWETH, uint256 reservesToken) =
             UniswapV2Library.getReserves({factory: _uniswapFactory, tokenA: address(_weth), tokenB: address(_token)});
-
         return UniswapV2Library.quote({amountA: amount * 10 ** 18, reserveA: reservesToken, reserveB: reservesWETH});
     }
 }
+            // function getReserves(address factory, address tokenA, address tokenB)
+            //     internal
+            //     view
+            //     returns (uint256 reserveA, uint256 reserveB)
+            // {
+            //     (address token0,) = sortTokens(tokenA, tokenB);
+            //     (uint256 reserve0, uint256 reserve1,) = IUniswapV2Pair(pairFor(factory, tokenA, tokenB)).getReserves();
+            //     (reserveA, reserveB) = tokenA == token0 ? (reserve0, reserve1) : (reserve1, reserve0);
+            // }
+
+        
+            // function quote(uint256 amountA, uint256 reserveA, uint256 reserveB) internal pure returns (uint256 amountB) {
+            //     require(amountA > 0, "UniswapV2Library: INSUFFICIENT_AMOUNT");
+            //     require(reserveA > 0 && reserveB > 0, "UniswapV2Library: INSUFFICIENT_LIQUIDITY");
+            //     amountB = amountA * reserveB / reserveA;
+            // }
+
+    
+

