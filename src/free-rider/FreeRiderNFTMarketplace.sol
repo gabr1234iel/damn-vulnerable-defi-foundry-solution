@@ -6,17 +6,18 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {DamnValuableNFT} from "../DamnValuableNFT.sol";
 
-contract FreeRiderNFTMarketplace is ReentrancyGuard {
+contract FreeRiderNFTMarketplace is ReentrancyGuard {   
+
     using Address for address payable;
 
-    DamnValuableNFT public token;
-    uint256 public offersCount;
+    DamnValuableNFT public token;   // NFT contract
+    uint256 public offersCount;     // number of active offers
 
     // tokenId -> price
-    mapping(uint256 => uint256) private offers;
+    mapping(uint256 => uint256) private offers;     //maps token id to price
 
-    event NFTOffered(address indexed offerer, uint256 tokenId, uint256 price);
-    event NFTBought(address indexed buyer, uint256 tokenId, uint256 price);
+    event NFTOffered(address indexed offerer, uint256 tokenId, uint256 price);      // event for NFT offer
+    event NFTBought(address indexed buyer, uint256 tokenId, uint256 price);         // event for NFT buy
 
     error InvalidPricesAmount();
     error InvalidTokensAmount();
@@ -88,6 +89,7 @@ contract FreeRiderNFTMarketplace is ReentrancyGuard {
         }
     }
 
+
     function _buyOne(uint256 tokenId) private {
         uint256 priceToPay = offers[tokenId];
         if (priceToPay == 0) {
@@ -96,16 +98,27 @@ contract FreeRiderNFTMarketplace is ReentrancyGuard {
 
         if (msg.value < priceToPay) {
             revert InsufficientPayment();
-        }
+        }   
+
+        // exploit here, because the price is checked within the buyMany loop, we can flashswap the eth from uniswap pair, pay the price of 1 nft to buy all...
+        // we can send the nfts we get to the recovery manager to get paid 45eth to repay the initial flash swap 'loan'
 
         --offersCount;
 
         // transfer from seller to buyer
         DamnValuableNFT _token = token; // cache for gas savings
-        _token.safeTransferFrom(_token.ownerOf(tokenId), msg.sender, tokenId);
+        _token.safeTransferFrom(_token.ownerOf(tokenId), msg.sender, tokenId);          
+        // nft is transferred from seller to buyer using safeTransferFrom
+        // new owner is msg.sender(buyer)
+        
 
         // pay seller using cached token
         payable(_token.ownerOf(tokenId)).sendValue(priceToPay);
+
+        // the contract call sendValue to the wrong recipient (_token.ownerOf(tokenId)) which at this time it's the msg.sender (buyer)
+        // since the nft was transferred to him right before this call. The 15 ETH will go back to the buyer because of this which will allow him to 
+        // basically pay 15 ETH for all available nfts.
+        // the contract should have used the owner of the contract as the recipient of the 15 ETH or like previous owner instead of current owner.
 
         emit NFTBought(msg.sender, tokenId, priceToPay);
     }
